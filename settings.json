@@ -1,0 +1,18 @@
+{
+    "subscribe_address": {
+    }, 
+    "client_settings": {
+        "local": {
+            "free_diskspace": 1000
+        }
+    }, 
+    "server_listening_port": 444, 
+    "server_cert_path": "server.pem", 
+    "server_listening_address": "0.0.0.0", 
+    "maximum_items_per_client": 30, 
+    "check_interval": {
+        "DEFAULT": 60
+    }, 
+    "path": {
+    }
+}
