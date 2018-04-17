@@ -3,6 +3,7 @@
     }, 
     "client_settings": {
         "local": {
+            "subscribe_to":[],
             "free_diskspace": 1000
         }
     }, 

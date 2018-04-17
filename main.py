@@ -36,24 +36,33 @@ def dprint(string):
     uprint(u"[" + u"{:%d %b %Y %H:%M:%S}".format(datetime.datetime.now()) + u"] " + unicode(string))
 
 def initialize(path_to_settings):
+    # Read in settings
     with open(path_to_settings, "r+") as fsettings:
         global settings
         settings = json.load(fsettings)
+    # Dictionary distributed_rss setup
     for client in settings["client_settings"]:
             distributed_rss[client] = {}
             clients.append(client)
             if not settings["path"].has_key(client):
                 settings["path"][client] = {}
             for site in settings["subscribe_address"].keys():
-                distributed_rss[client][site] = {"tasks":{}, "order":[],"actual_feed":None}
-                if not settings["path"][client].has_key(site):
-                    # Generate random passkey
-                    settings["path"][client][site] = "/{client}/{passkey}".format(client = client, passkey = "".join(random.choice(string.ascii_letters + string.digits) for _ in range(16)))
+                if site in settings["client_settings"][client]["subscribe_to"]:
+                    distributed_rss[client][site] = {"tasks":{}, "order":[],"actual_feed":None}
+                    if not settings["path"][client].has_key(site):
+                        # Generate random passkey
+                        settings["path"][client][site] = "/{client}/{passkey}".format(client = client, passkey = "".join(random.choice(string.ascii_letters + string.digits) for _ in range(16)))
+                elif not site in settings["client_settings"][client]["subscribe_to"] and site in settings["path"][client]:
+                    # Remove the extra path
+                    # Will trigger warnings in the generateRSS() and getClientFeed() if mismatch path exists
+                    del settings["path"][client][site]
+    # Global variables setup
     for site in settings["subscribe_address"].keys():
         tasks[site] = {}
         new_tasks[site] = {}
         rss_templetes[site] = xmlTree.Element(u"rss")
         last_rss_update[site] = time.time()
+    # Write the settings back
     with open(path_to_settings, "w+") as fsettings:
         fsettings.write(json.dumps(settings, indent = 4))
 
@@ -66,7 +75,7 @@ def getRSS(address):
     if isinstance(address, (list, tuple)):
         result = {}
         for address_ in address:
-            result[address] = getRSS(address)
+            result[address_] = getRSS(address_)
         # >> {site_address:content}
     elif isinstance(address, (str, unicode)):
         dprint(u"getRSS(): Processing {address}...".format(address = address))
@@ -111,7 +120,9 @@ def parseRSS(site, content, encoding = "UTF-8"):
         #xmlTree.dump(rss_templetes[site])
     return new_tasks
 
-def distributeTask(sites = new_tasks.keys(), by = "number"):
+def distributeTask(sites = None, by = "number"):
+    if not sites:
+        sites = new_tasks.keys()
     if isinstance(by, str):
         updated = []
         if by == "number":
@@ -121,19 +132,34 @@ def distributeTask(sites = new_tasks.keys(), by = "number"):
                     updated.append(site)
                 elif not new_tasks[site]:
                     dprint(u"Nothing new from {}! qwq".format(site))
-                for task, index in zip(new_tasks[site], range(len(new_tasks[site].keys()))):
-                    dprint(u"Task {task} from {site} is distributed to client {client}".format(task = task, site = site, client = clients[index%len(clients)]))
-                    distributed_rss[clients[index%len(clients)]][site]["tasks"][task] = new_tasks[site][task]
-                    distributed_rss[clients[index%len(clients)]][site]["order"].append(task)
-            #print(distributed_rss)
+                index = 0
+                for task in new_tasks[site]:
+                    for i in range(len(clients)):
+                        print(settings["client_settings"][clients[index%len(clients)]]["subscribe_to"])
+                        if site in settings["client_settings"][clients[index%len(clients)]]["subscribe_to"]:
+                            dprint(u"Task {task} from {site} is distributed to client {client}".format(task = task, site = site, client = clients[index%len(clients)]))
+                            distributed_rss[clients[index%len(clients)]][site]["tasks"][task] = new_tasks[site][task]
+                            distributed_rss[clients[index%len(clients)]][site]["order"].append(task)
+                            index += 1
+                            break
+                        else:
+                            index +=1
+                            i+=1   # Prevent accidentally break in the below code when the last client is found subscribe to that site
+                    if i == len(clients):
+                        dprint(u"No client subscribe to site {}!".format(site))
+                        # Check task dictionary to make sure no overflows take place
+                        # New tasks will be added back at next check
+                        if len(tasks[site].keys()) > 500:
+                            tasks[site] = {}
+                        break
         else:
             raise Exception(u"distributeTask(): No such sort method: {}".format(by))
     elif isinstance(by, types.FunctionType):
         by(new_tasks, distributed_rss)
 
     # Cut the list if too long
-    for site in settings["subscribe_address"].keys():
-        for client in clients:
+    for client in distributed_rss.keys():
+        for site in distributed_rss[client].keys():
             if len(distributed_rss[client][site]["order"]) > settings["maximum_items_per_client"]:
                 for _ in range(len(distributed_rss[client][site]["order"])-settings["maximum_items_per_client"]):
                     removed_task = distributed_rss[client][site]["order"].pop(0)
@@ -151,6 +177,9 @@ def generateRSS(client, sites=None):
         if client in distributed_rss and sites:
             if isinstance(sites, (list,tuple)):
                 for site in sites:
+                    if not site in settings["client_settings"][client]["subscribe_to"]:
+                        dprint(u"generateRSS(): Warning: Client {} does not subscribe to Site {}!".format(client, site))
+                        continue
                     distributed_rss[client][site]["actual_feed"] = xmlTree.fromstring(xmlTree.tostring(rss_templetes[site]))
                     node_channel = distributed_rss[client][site]["actual_feed"].find("channel")
                     for task in distributed_rss[client][site]["tasks"].keys():
@@ -160,7 +189,7 @@ def generateRSS(client, sites=None):
             elif isinstance(sites, (str, unicode)):
                 generateRSS(client, [sites])
         elif client in distributed_rss and sites == None:
-            generateRSS(client, settings["subscribe_address"].keys())
+            generateRSS(client, settings["client_settings"][client]["subscribe_to"])
         elif not client in distributed_rss:
             raise Exception(u"Client {} not found!".format(client))
 
@@ -183,7 +212,10 @@ class RSSRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                     match = (client, site)
         if match:
             print("Client Matched: {}".format(match))
-            return xmlTree.tostring(distributed_rss[match[0]][match[1]]["actual_feed"], encoding="utf-8")
+            if distributed_rss.has_key(match[0]):
+                if distributed_rss[match[0]].has_key(match[1]):
+                    return xmlTree.tostring(distributed_rss[match[0]][match[1]]["actual_feed"], encoding="utf-8")
+            dprint(u"getClientFeed(): Cannot find this combination from the system: {}".format(match))
         else:
             print("Warning: Unauthorized Access Detected! Details:\n{client_address} >> {requestline} >> {path}".format(client_address = self.client_address, requestline = self.requestline, path = self.path))
             return None

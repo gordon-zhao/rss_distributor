@@ -1,4 +1,5 @@
-settings.json Explanation:
+# settings.json Explanation:
+'''json
 {
 	# RSS Addresses
     # Format: "site nickname":"rss address",   <--!!!Remember to put Comma after it!!!
@@ -8,6 +9,9 @@ settings.json Explanation:
     # Client Settings
     "client_settings":{
         "local":{
+            # REQUIRED FIELD
+            # Sites that the client is subscribing to
+            "subscribe_to":[],
             # In GiB
             "free_diskspace":1000
         }
@@ -28,3 +32,4 @@ settings.json Explanation:
     # Path of Feeds. DO NOT MODIFY IT UNLESS U KNOW WHAT U ARE DOING!!
     "path":{}
 }
+'''
