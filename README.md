@@ -1,7 +1,7 @@
 # settings.json Explanation:
-'''json
+```python
 {
-	# RSS Addresses
+    # RSS Addresses
     # Format: "site nickname":"rss address",   <--!!!Remember to put Comma after it!!!
     "subscribe_address":{
             "nickname":"",
@@ -11,7 +11,7 @@
         "local":{
             # REQUIRED FIELD
             # Sites that the client is subscribing to
-            "subscribe_to":[],
+            "subscribe_to":["nickname"],
             # In GiB
             "free_diskspace":1000
         }
@@ -32,4 +32,4 @@
     # Path of Feeds. DO NOT MODIFY IT UNLESS U KNOW WHAT U ARE DOING!!
     "path":{}
 }
-'''
+```
